@@ -1,11 +1,31 @@
 #include "cache.h"
 #include "ooo_cpu.h"
 
+// https://en.wikipedia.org/wiki/Pairing_function#Cantor_pairing_function
+// Look at this for singature encoding for now ^.
+
+struct hist_table
+{
+    //this contains encoded signatures (PCs) for all blocks
+    uint64_t *tag_array;
+    uint64_t *signatures;
+}
+
+struct db_table
+{  
+    //this contains the signatures that end with a deadblock
+    // and the corresponding address to fetch after the deadblock
+    uint64_t *signatures;
+    uint64_t *pf_addr;
+};
+
+
 void CACHE::l1d_prefetcher_initialize() 
 {
     cout << "CPU " << cpu << " L1D DBCP prefetcher" << endl;
     cout << this->NAME << endl;
 
+    // print the tag array just for test.. It'll print zeroes cause its empty at the beginning
     for(uint32_t i=0;i<this->NUM_SET;i++){
         
         for (uint32_t j = 0; j < this->NUM_WAY; j++)
@@ -13,7 +33,6 @@ void CACHE::l1d_prefetcher_initialize()
             cout << this->block[i][j].tag << endl;
         }
         
-
     }
 }
 
