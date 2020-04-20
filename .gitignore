@@ -36,3 +36,4 @@ results_10M/*
 results_200M/*
 dpc3_traces/*
 .vscode/settings.json
+bin/*

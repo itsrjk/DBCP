@@ -1,0 +1,1 @@
+./build_champsim.sh bimodal no dbcp no no lru 1 && ./run_champsim.sh bimodal-no-dbcp-no-no-lru-1core 1 10 603.bwaves_s-5359B.champsimtrace.xz

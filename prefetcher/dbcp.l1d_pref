@@ -4,12 +4,12 @@
 void CACHE::l1d_prefetcher_initialize() 
 {
     cout << "CPU " << cpu << " L1D DBCP prefetcher" << endl;
-    cout << L1D.NAME << endl;
+    cout << this->NAME << endl;
 }
 
 void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type)
 {
-    uint64_t pf_addr = ((addr>>LOG2_BLOCK_SIZE)+1) << LOG2_BLOCK_SIZE;
+    //uint64_t pf_addr = ((addr>>LOG2_BLOCK_SIZE)+1) << LOG2_BLOCK_SIZE;
 
     //DP ( if (warmup_complete[cpu]) {
     //cout << "[" << NAME << "] " << __func__ << hex << " base_cl: " << (addr>>LOG2_BLOCK_SIZE);
