@@ -5,6 +5,16 @@ void CACHE::l1d_prefetcher_initialize()
 {
     cout << "CPU " << cpu << " L1D DBCP prefetcher" << endl;
     cout << this->NAME << endl;
+
+    for(uint32_t i=0;i<this->NUM_SET;i++){
+        
+        for (uint32_t j = 0; j < this->NUM_WAY; j++)
+        {
+            cout << this->block[i][j].tag << endl;
+        }
+        
+
+    }
 }
 
 void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type)
