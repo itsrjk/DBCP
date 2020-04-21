@@ -1,58 +1,99 @@
+/*
+ * Implementation of Dead Block Correlating Prefetcher - Lai, Fide, Falsafi
+ * Reuel Johm and Deepraj Pandey
+ *
+ * 28 April, 2020
+ */
+
 #include "cache.h"
 #include "ooo_cpu.h"
+#include <vector>
+
+using namespace std;
+
+uint64_t get_new_signature(uint64_t, uint64_t);
+void insert_to_hist(uint64_t, uint64_t);
+void printmap();
+void printvec(vector<uint64_t>);
 
 // https://en.wikipedia.org/wiki/Pairing_function#Cantor_pairing_function
 // Look at this for singature encoding for now ^.
 
-struct hist_table
-{
-    //this contains encoded signatures (PCs) for all blocks
-    uint64_t *tag_array;
-    uint64_t *signatures;
-}
+// struct hist_table
+// {
+//     //this contains encoded signatures (PCs) for all blocks
+//     uint64_t *tag_array;
+//     uint64_t *signatures;
+// };
 
-struct db_table
-{  
-    //this contains the signatures that end with a deadblock
-    // and the corresponding address to fetch after the deadblock
-    uint64_t *signatures;
-    uint64_t *pf_addr;
-};
+// struct db_table
+// {  
+//     //this contains the signatures that end with a deadblock
+//     // and the corresponding address to fetch after the deadblock
+//     uint64_t *signatures;
+//     uint64_t *pf_addr;
+// };
 
+// suggestion: we will use tags and signatures as our keys,
+// so let's use map (dict.) for these directories
+// hist_table - block_addr: [PC1, PC2, PC3...]
+map<uint64_t, vector<uint64_t>> hist_table;
+// db_table - signature: []
 
 void CACHE::l1d_prefetcher_initialize() 
 {
     cout << "CPU " << cpu << " L1D DBCP prefetcher" << endl;
     cout << this->NAME << endl;
-
-    // print the tag array just for test.. It'll print zeroes cause its empty at the beginning
-    for(uint32_t i=0;i<this->NUM_SET;i++){
-        
-        for (uint32_t j = 0; j < this->NUM_WAY; j++)
-        {
-            cout << this->block[i][j].tag << endl;
-        }
-        
-    }
 }
 
 void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type)
 {
-    //uint64_t pf_addr = ((addr>>LOG2_BLOCK_SIZE)+1) << LOG2_BLOCK_SIZE;
+    uint64_t tag = addr >> LOG2_BLOCK_SIZE;
+    // adding full trace to history table right now
+    // TODO: delete this
+    insert_to_hist(tag, ip);
 
-    //DP ( if (warmup_complete[cpu]) {
-    //cout << "[" << NAME << "] " << __func__ << hex << " base_cl: " << (addr>>LOG2_BLOCK_SIZE);
-    //cout << " pf_cl: " << (pf_addr>>LOG2_BLOCK_SIZE) << " ip: " << ip << " cache_hit: " << +cache_hit << " type: " << +type << endl; });
-
-    //prefetch_line(ip, addr, pf_addr, FILL_L1, 0);
+    // // encode and update history table
+    // // TODO:change map to <uint64_t, uint64_t> first!
+    // // and change implementation to make this work
+    // uint64_t curr_sig = hist_table[tag];
+    // uint64_t new_sig = get_new_signature(curr_sig, ip);
+    // insert_to_hist(tag, new_sig);
 }
 
 void CACHE::l1d_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t way, uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in)
 {
-
+    uint64_t tag_evict = evicted_addr >> LOG2_BLOCK_SIZE;
+    // cout << this->block[set][way].tag << "\t" << blocknum << endl;
+    // this block is now invalidated, move to db correlation table
+    insert_to_db_corr(tag_evict, placeholder);
 }
 
 void CACHE::l1d_prefetcher_final_stats()
 {
     cout << "CPU " << cpu << " L1D DBCP final stats" << endl;
+}
+
+
+//======== Helper Functions ========//
+void insert_to_hist(uint64_t tag, uint64_t new_pc)
+{
+    hist_table[tag].push_back(new_pc);
+}
+
+void print_hist_table()
+{
+    for (auto i = hist_table.begin(); i != hist_table.end(); i++) {
+        cout << "map: " << i->first << "\t";
+        printvec(i->second);
+    }
+    cout << endl;
+}
+
+void printvec(vector<uint64_t> inp)
+{
+    for (auto i = inp.begin(); i != inp.end(); i++) {
+        cout << *i << " ";
+    }
+    cout << endl << endl;
 }
