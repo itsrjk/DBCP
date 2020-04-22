@@ -1,7 +1,7 @@
 #include "cache.h"
 #include "ooo_cpu.h"
 
-// https://en.wikipedia.org/wiki/Pairing_function#Cantor_pairing_function
+
 // Look at this for singature encoding for now ^.
 
 struct hist_table
@@ -19,6 +19,16 @@ struct db_table
     uint64_t *pf_addr;
 };
 
+// https://en.wikipedia.org/wiki/Pairing_function#Cantor_pairing_function
+// Uses this function ^
+void uint64_t encoder(uint64_t pc_1, uint64_t pc_2){
+
+    uint64_t signature = (pc_1 + pc_2);
+    signature *= (signature+1)
+    signature*=0.5;
+    signature+=pc_2;
+    return signature;
+}
 
 void CACHE::l1d_prefetcher_initialize() 
 {
