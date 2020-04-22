@@ -45,7 +45,21 @@ void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit
 {
     uint64_t tag = addr >> LOG2_BLOCK_SIZE;
     // update history table
-    insert_to_hist(tag, ip);
+    // insert_to_hist(tag, ip);
+
+    if (!cache_hit) {
+        uint64_t tag = addr >> LOG2_BLOCK_SIZE;
+        // add new row to history table
+        hist_table[tag] = ip;
+    }
+    else {
+        // add this ip to the trace
+        history_iter ht_itr = hist_table.find(tag);
+        // if we found the element, i.e. iterator hasn't reached the end
+        if (ht_itr != hist_table.end()) {
+            hist_table[tag] = xor_encoding(hist_table[tag], ip);
+        }
+    }
 
     // this is the current trace for this block
     uint64_t signature = hist_table[tag];
