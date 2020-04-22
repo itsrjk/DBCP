@@ -21,10 +21,10 @@ struct db_table
 
 // https://en.wikipedia.org/wiki/Pairing_function#Cantor_pairing_function
 // Uses this function ^
-void uint64_t encoder(uint64_t pc_1, uint64_t pc_2){
+uint64_t encoder(uint64_t pc_1, uint64_t pc_2){
 
     uint64_t signature = (pc_1 + pc_2);
-    signature *= (signature+1)
+    signature *= (signature+1);
     signature*=0.5;
     signature+=pc_2;
     return signature;
