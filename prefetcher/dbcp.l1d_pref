@@ -1,68 +1,126 @@
+/*
+ * Implementation of Dead Block Correlating Prefetcher - Lai, Fide, Falsafi
+ * Reuel Johm and Deepraj Pandey
+ *
+ * 28 April, 2020
+ */
+
+#include <map>
+#include <utility> // for pair
 #include "cache.h"
 #include "ooo_cpu.h"
 
+// for the 2-bit saturating counters corresponding to 
+// the traces in deadblock table
+#define MAX_COUNTER = 3;
 
-// Look at this for singature encoding for now ^.
+using namespace std;
 
-struct hist_table
+typedef map<uint64_t, uint64_t>::iterator mapiter;
+
+uint64_t get_new_signature(uint64_t, uint64_t);
+void insert_to_hist(uint64_t, uint64_t);
+void printmap();
+void printvec(vector<uint64_t>);
+
+// hist_table - block_addr: [PC1, PC2, PC3...]
+map<uint64_t, uint64_t> hist_table;
+// db_table - signature: [<2bit_saturating_counter, prefetch_addr>, ...]
+map<uint64_t, pair<uint8_t, uint64_t>> db_table;
+
+void CACHE::l1d_prefetcher_initialize() 
 {
-    //this contains encoded signatures (PCs) for all blocks
-    uint64_t *tag_array;
-    uint64_t *signatures;
+    cout << "CPU " << cpu << " L1D DBCP prefetcher" << endl;
+    cout << this->NAME << endl;
 }
 
-struct db_table
-{  
-    //this contains the signatures that end with a deadblock
-    // and the corresponding address to fetch after the deadblock
-    uint64_t *signatures;
-    uint64_t *pf_addr;
-};
+void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type)
+{
+    uint64_t tag = addr >> LOG2_BLOCK_SIZE;
+    // update history table
+    insert_to_hist(tag, ip);
+    uint64_t signature = hist_table[tag]
+}
 
-// https://en.wikipedia.org/wiki/Pairing_function#Cantor_pairing_function
-// Uses this function ^
-uint64_t encoder(uint64_t pc_1, uint64_t pc_2){
+void CACHE::l1d_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t way, uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in)
+{
+    // this will store the signature corresponding to the tag
+    // of the block being evicted
+    uint64_t signature;
+    uint64_t tag_evict = evicted_addr >> LOG2_BLOCK_SIZE;
+    mapiter ht_itr = hist_table.find(tag_evict);
+    // found the signature in history table
+    if (ht_itr != hist_table.end()) {
+        signature = hist_table[tag_evict];
 
-    uint64_t signature = (pc_1 + pc_2);
+        // Note: the signature is our index into deadblock table
+
+        // Move this block's trace from history table to deadblock table
+        mapiter db_itr = db_table.find(signature);
+        if (db_itr != db_table.end() && db_table[signature].first < MAX_COUNTER) {
+            // if found, then just increment the counter
+            // each element in the table is a std::pair<> of counter, prefetch_addr
+            db_table[signature].first += 1;
+        }
+        else {
+            // add a new entry for this trace in deadblock table
+            // initialise 2bit counter to 1, prefetch address = addr
+            pair<uint8_t, uint64_t> new_trace (1, addr);
+            db_table[signature] = new_trace;
+        }
+
+        // Remove this block's entry from history table
+        hist_table.erase(tag_evict);
+    }
+}
+
+void CACHE::l1d_prefetcher_final_stats()
+{
+    cout << "CPU " << cpu << " L1D DBCP final stats" << endl;
+}
+
+
+//======== Helper Functions ========//
+// an implementation of cantor pairing which we use as one of the
+// encoding algorithms
+// TODO: use bitshifting to do the arithmetic operations
+uint64_t cantor_encoding(uint64_t old_sig, uint64_t pc_2)
+{
+    uint64_t signature = (old_sig + pc_2);
     signature *= (signature+1);
     signature*=0.5;
     signature+=pc_2;
     return signature;
 }
 
-void CACHE::l1d_prefetcher_initialize() 
+// add new_pc to some element in the history table
+// if tag doesn't exist, it will place new_pc there
+// else, it will add new+pc to the existing trace encoding
+void insert_to_hist(uint64_t tag, uint64_t new_pc)
 {
-    cout << "CPU " << cpu << " L1D DBCP prefetcher" << endl;
-    cout << this->NAME << endl;
-
-    // print the tag array just for test.. It'll print zeroes cause its empty at the beginning
-    for(uint32_t i=0;i<this->NUM_SET;i++){
-        
-        for (uint32_t j = 0; j < this->NUM_WAY; j++)
-        {
-            cout << this->block[i][j].tag << endl;
-        }
-        
+    map<uint64_t, uint64_t>::iterator itr = hist_table.find(id);
+    // if we found the element and iterator hasn't reached the end
+    if (itr != hist_table.end()) {
+        hist_table[tag] = cantor_encoding(hist_table[tag], new_pc);
+    }
+    else {
+        hist_table[tag] = new_pc;
     }
 }
 
-void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type)
+void print_hist_table()
 {
-    //uint64_t pf_addr = ((addr>>LOG2_BLOCK_SIZE)+1) << LOG2_BLOCK_SIZE;
-
-    //DP ( if (warmup_complete[cpu]) {
-    //cout << "[" << NAME << "] " << __func__ << hex << " base_cl: " << (addr>>LOG2_BLOCK_SIZE);
-    //cout << " pf_cl: " << (pf_addr>>LOG2_BLOCK_SIZE) << " ip: " << ip << " cache_hit: " << +cache_hit << " type: " << +type << endl; });
-
-    //prefetch_line(ip, addr, pf_addr, FILL_L1, 0);
+    for (auto i = hist_table.begin(); i != hist_table.end(); i++) {
+        cout << "map: " << i->first << "\t";
+        printvec(i->second);
+    }
+    cout << endl;
 }
 
-void CACHE::l1d_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t way, uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in)
+void printvec(vector<uint64_t> inp)
 {
-
-}
-
-void CACHE::l1d_prefetcher_final_stats()
-{
-    cout << "CPU " << cpu << " L1D DBCP final stats" << endl;
+    for (auto i = inp.begin(); i != inp.end(); i++) {
+        cout << *i << " ";
+    }
+    cout << endl << endl;
 }
