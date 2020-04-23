@@ -1,4 +1,7 @@
 #include "cache.h"
+#include<bitset>
+
+using namespace std;
 
 void CACHE::l1d_prefetcher_initialize() 
 {
@@ -8,6 +11,17 @@ void CACHE::l1d_prefetcher_initialize()
 void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type)
 {
     uint64_t pf_addr = ((addr>>LOG2_BLOCK_SIZE)+1) << LOG2_BLOCK_SIZE;
+    cout << "\naddr: " << addr << "::" << bitset<8*sizeof(addr)>(addr);
+    uint64_t addr_plus = addr+1;
+    cout << "\taddr+1: " << addr_plus << "::" << bitset<8*sizeof(addr_plus)>(addr_plus) << endl;
+    uint64_t blocknum = addr >> LOG2_BLOCK_SIZE;
+    cout << "blocknum: " << blocknum << "::" << bitset<8*sizeof(blocknum)>(blocknum);
+    uint64_t blocknum_plus = blocknum+1;
+    cout << "\tblocknum+1: " << blocknum_plus << "::" << bitset<8*sizeof(blocknum_plus)>(blocknum_plus) << endl;
+    cout << "ip: " << ip << "::" << bitset<8*sizeof(ip)>(ip);
+    uint64_t ip_plus = ip+1;
+    cout << "\tip+1: " << ip_plus << "::" << bitset<8*sizeof(ip_plus)>(ip_plus) << endl << endl;
+
 
     DP ( if (warmup_complete[cpu]) {
     cout << "[" << NAME << "] " << __func__ << hex << " base_cl: " << (addr>>LOG2_BLOCK_SIZE);
@@ -18,7 +32,9 @@ void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit
 
 void CACHE::l1d_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t way, uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in)
 {
-
+	cout << "==========" << endl << endl;
+	// for (uint)
+	cout << "==========" << endl << endl;
 }
 
 void CACHE::l1d_prefetcher_final_stats()

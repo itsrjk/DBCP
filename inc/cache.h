@@ -1,6 +1,10 @@
 #ifndef CACHE_H
 #define CACHE_H
 
+#include <algorithm> // find
+#include <map>
+#include <utility> // pair
+#include <vector>
 #include "memory_class.h"
 
 // PAGE
@@ -221,7 +225,18 @@ class CACHE : public MEMORY {
              get_way(uint64_t address, uint32_t set),
              find_victim(uint32_t cpu, uint64_t instr_id, uint32_t set, const BLOCK *current_set, uint64_t ip, uint64_t full_addr, uint32_t type),
              llc_find_victim(uint32_t cpu, uint64_t instr_id, uint32_t set, const BLOCK *current_set, uint64_t ip, uint64_t full_addr, uint32_t type),
-             lru_victim(uint32_t cpu, uint64_t instr_id, uint32_t set, const BLOCK *current_set, uint64_t ip, uint64_t full_addr, uint32_t type);
+             lru_victim(uint32_t cpu, uint64_t instr_id, uint32_t set, const BLOCK *current_set, uint64_t ip, uint64_t full_addr, uint32_t type),
+             fifo_victim(uint32_t cpu, uint64_t instr_id, uint32_t set, const BLOCK *current_set, uint64_t ip, uint64_t full_addr, uint32_t type);
+
+    void insert_to_hist(uint64_t tag, uint64_t new_pc),
+        print_hist_table(),
+        print_db_table();
+    // the incoming cache will be stored in this queue. Popped from the front.
+    private:
+        // hist_table - block_addr: [PC1, PC2, PC3...]
+        static std::map<uint64_t, uint64_t> hist_table;
+        static std::map<uint64_t, std::pair<uint8_t, uint64_t>> db_table;
+        static std::vector<uint32_t> fifo_queue;
 };
 
 #endif

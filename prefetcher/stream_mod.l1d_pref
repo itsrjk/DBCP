@@ -1,0 +1,147 @@
+/*
+ * Implements a stream prefetcher: if a cache miss, prefetches A to A+k blocks
+ * into one of l stream buffers (pick lru) and prefetches the block with missed addr.
+ * If A+1 is accessed at any point, A+k+1 is added to the buffer.
+ *
+ * 28 March, 2019
+ * Deepraj Pandey
+ */
+
+#include <queue>
+#include <vector>
+#include <assert.h>
+#include "cache.h"
+
+#define BUFFER_DEPTH 4
+#define NUM_BUFFERS 8
+
+using namespace std;
+
+// vector with NUM_BUFFERS stream buffers
+// vector[0] is MRU position
+// vector[NUM_BUFFERS] is LRU
+vector< queue<uint64_t> > l1d_all_buffers;
+// number of cache lines read into the buffers
+uint64_t stream_pf_request;
+// number of cache lines moved from stream to L1-D
+uint64_t stream_pf_issued;
+
+// DEBUG functions
+void printvec();
+void printqueue(queue<uint64_t>);
+
+void CACHE::l1d_prefetcher_initialize() 
+{
+    // initialise 8 fifo streams
+    for (uint8_t i=0; i<NUM_BUFFERS; i++) {
+        l1d_all_buffers.push_back(queue<uint64_t>());
+    }
+    assert(l1d_all_buffers.size() == NUM_BUFFERS);
+    stream_pf_request = 0;
+    stream_pf_issued = 0;
+}
+
+void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type)
+{
+    if (type != LOAD)
+        return;
+
+    uint64_t pf_addr;
+    uint64_t block_num = addr >> LOG2_BLOCK_SIZE;
+
+    // we care only about the misses
+    if (cache_hit == 0) {
+        // DEBUG
+        // cout << endl << "current block: " << block_num << endl;
+        // printvec();
+
+        // check if the block is in any of the stream buffers
+        uint8_t index = -1;
+
+        for (index=0; index<NUM_BUFFERS; index++) {
+            if (l1d_all_buffers[index].front() == block_num)
+                break;
+        }
+
+        // block isn't in any stream buffer
+        if (index == NUM_BUFFERS) {
+            // last position is LRU, remove the queue
+            l1d_all_buffers.pop_back();
+            assert (l1d_all_buffers.size() == NUM_BUFFERS - 1);
+
+            queue<uint64_t> temp;
+            // add k blocks to a fifo queue. k = BUFFER_DEPTH
+            for (uint8_t j=1; j<=BUFFER_DEPTH; j++) {
+                // A+1, A+2,... A+k because A(addr) will be prefetched
+                temp.push(block_num + j);
+                stream_pf_request++;
+            }
+
+            // place Queue(block to block+k) at mru position (start) of vector
+            l1d_all_buffers.insert(l1d_all_buffers.begin(), temp);
+            while(!temp.empty()) temp.pop(); // clear the temp queue
+            // prefetch the block with missed addr
+            // pf_addr = block_num<<LOG2_BLOCK_SIZE;
+        }
+        // block_num matched to front of some stream buffer at [index]
+        else {
+            queue<uint64_t> temp = l1d_all_buffers[index];
+            temp.pop();
+            // fetch the addr in the second position of this fifo stream
+            uint64_t pf_block = temp.front(); // this is addr>>6, i.e. block number
+            pf_addr = pf_block<<LOG2_BLOCK_SIZE;
+            // cout << "[" << NAME << "] " << __func__ << hex << " base_addr: " << addr << " pf_addr: " << pf_addr;
+            // cout << " pf_cl: " << uint64_t(pf_addr>>LOG2_BLOCK_SIZE) << " pf_block: " << pf_block << " ip: " << ip << " cache_hit: " << +cache_hit << " type: " << +type << endl;
+            prefetch_line(ip, addr, pf_addr, FILL_L1, 0);
+            temp.pop();
+            stream_pf_issued++;
+            // we just popped A+1 (block_num). add A+5 at the end of queue
+            temp.push(block_num+BUFFER_DEPTH);
+            temp.push(block_num+BUFFER_DEPTH+1);
+            stream_pf_request+=2;
+            
+            // remove the old copy of the queue
+            l1d_all_buffers.erase(l1d_all_buffers.begin()+index);
+            // move the queue (with 2nd addr now 1st) to mru position
+            l1d_all_buffers.insert(l1d_all_buffers.begin(), temp);
+            while(!temp.empty()) temp.pop(); // clear the temp queue
+            assert(l1d_all_buffers.size() == NUM_BUFFERS);
+        }
+        // DEBUG
+        // printvec();
+    }
+    DP (if (warmup_complete[cpu]) {
+    cout << "[" << NAME << "] " << __func__ << hex << " block_num: " << block_num << " base_cl: " << uint64_t(addr>>LOG2_BLOCK_SIZE);
+    cout << " pf_cl: " << uint64_t(pf_addr) << " pf_block: " << pf_block << " ip: " << ip << " cache_hit: " << +cache_hit << " type: " << +type << endl; });
+}
+
+void CACHE::l1d_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t way, uint8_t prefetch, uint64_t evicted_addr, uint32_t metadata_in)
+{
+
+}
+
+void CACHE::l1d_prefetcher_final_stats()
+{
+    cout << endl << "CPU " << cpu << " L1D stream prefetcher final stats" << endl;
+    cout << "Prefetches REQUESTED: " << stream_pf_request << "\tISSUED: " << stream_pf_issued << endl;
+}
+
+void printvec()
+{
+    for (uint8_t i=0; i<NUM_BUFFERS; i++) {
+        cout << "vector: " << i << " ";
+        printqueue(l1d_all_buffers[i]);
+    }
+    cout << endl;
+}
+
+//function to print the queue
+void printqueue(queue<uint64_t> q)
+{
+    //printing content of queue 
+    while (!q.empty()){
+        cout<<" "<<q.front();
+        q.pop();
+    }
+    cout<<endl;
+}

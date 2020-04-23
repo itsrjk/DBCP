@@ -13,15 +13,18 @@
 // for the 2-bit saturating counters corresponding to 
 // the traces in deadblock table
 #define MAX_COUNTER 3
+#define BITS_TO_KEEP 30
 uint64_t dbtable_hit;
 
+// static std::map<uint64_t, uint64_t> CACHE::hist_table = std::map<uint64_t, uint64_t>();
 using namespace std;
 
 typedef map<uint64_t, uint64_t>::iterator history_iter;
 typedef map<uint64_t, pair<uint8_t, uint64_t>>::iterator deadblock_iter;
 
-uint64_t cantor_encoding(uint64_t, uint64_t);
+uint64_t add_truncate(uint64_t, uint64_t, uint8_t);
 uint64_t xor_encoding(uint64_t, uint64_t);
+uint64_t cantor_encoding(uint64_t, uint64_t);
 void insert_to_hist(uint64_t, uint64_t);
 void print_hist_table();
 void print_db_table();
@@ -29,10 +32,11 @@ uint64_t bitwise_add(uint64_t, uint64_t);
 uint64_t bitwise_mul(uint64_t, uint64_t);
 uint64_t bitwise_div(uint64_t, uint64_t);
 
+// Define the class members
 // hist_table - block_addr: [PC1, PC2, PC3...]
-map<uint64_t, uint64_t> hist_table;
+map<uint64_t, uint64_t> CACHE::hist_table;
 // db_table - signature: [<2bit_saturating_counter, prefetch_addr>, ...]
-map<uint64_t, pair<uint8_t, uint64_t>> db_table;
+map<uint64_t, pair<uint8_t, uint64_t>> CACHE::db_table;
 
 void CACHE::l1d_prefetcher_initialize() 
 {
@@ -50,32 +54,35 @@ void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit
     if (!cache_hit) {
         uint64_t tag = addr >> LOG2_BLOCK_SIZE;
         // add new row to history table
-        hist_table[tag] = ip;
+        // this->hist_table[tag] = add_truncate(0, ip, 1);
+        this->hist_table[tag] = ip;
     }
     else {
         // add this ip to the trace
-        history_iter ht_itr = hist_table.find(tag);
+        history_iter ht_itr = this->hist_table.find(tag);
         // if we found the element, i.e. iterator hasn't reached the end
-        if (ht_itr != hist_table.end()) {
-            hist_table[tag] = xor_encoding(hist_table[tag], ip);
+        if (ht_itr != this->hist_table.end()) {
+            // this->hist_table[tag] = add_truncate(this->hist_table[tag], ip, 0);
+            this->hist_table[tag] = xor_encoding(this->hist_table[tag], ip);
         }
     }
-
+    // if we are here and it was a cache miss, high probability that we skip the next block
+    // b/c it's highly unlikely a block dies after a single access (goes against spatial locality assumptions)
     // this is the current trace for this block
-    uint64_t signature = hist_table[tag];
+    uint64_t signature = this->hist_table[tag];
 
     // Search if the current state of the trace for this block is in the deadblock table
-    deadblock_iter db_itr = db_table.find(signature);
-    if (db_itr != db_table.end()) {
+    deadblock_iter db_itr = this->db_table.find(signature);
+    if (db_itr != this->db_table.end()) {
         dbtable_hit++;
         // if found, this is a dead block, so increment the 2bit counter and prefetch
-        uint8_t trace_count = db_table[signature].first;
+        uint8_t trace_count = this->db_table[signature].first;
         uint8_t pred_confidence = (trace_count >= ((MAX_COUNTER + 1)/2) ? 1 : 0);
         if (pred_confidence) {
             // if we are confident based on the counter, then invalidate this block
             invalidate_entry(tag);
             // and prefetch
-            uint64_t pf_addr = db_table[signature].second;
+            uint64_t pf_addr = this->db_table[signature].second;
             prefetch_line(ip, addr, pf_addr, FILL_L1, 0);
         }
     }
@@ -87,37 +94,37 @@ void CACHE::l1d_prefetcher_cache_fill(uint64_t addr, uint32_t set, uint32_t way,
     // of the block being evicted
     uint64_t signature;
     uint64_t tag_evict = evicted_addr >> LOG2_BLOCK_SIZE;
-    history_iter ht_itr = hist_table.find(tag_evict);
+    history_iter ht_itr = this->hist_table.find(tag_evict);
     // found the signature in history table
-    if (ht_itr != hist_table.end()) {
-        signature = hist_table[tag_evict];
+    if (ht_itr != this->hist_table.end()) {
+        signature = this->hist_table[tag_evict];
 
         // Note: the signature is our index into deadblock table
 
         // Move this block's trace from history table to deadblock table
-        deadblock_iter db_itr = db_table.find(signature);
-        if (db_itr == db_table.end()) {
+        deadblock_iter db_itr = this->db_table.find(signature);
+        if (db_itr == this->db_table.end()) {
             // if doesn't exist, add a new entry for this trace in deadblock table
             // initialise 2bit counter to 1, prefetch address = addr
             pair<uint8_t, uint64_t> new_trace (1, addr);
-            db_table[signature] = new_trace;
+            this->db_table[signature] = new_trace;
         }
-        else if ((db_table[signature].first < MAX_COUNTER)) {
+        else if ((this->db_table[signature].first < MAX_COUNTER)) {
             // if found, then just increment the counter,
             // i.e. another time this trace resulted in a dead block
             // each element in the table is a std::pair<> of counter, prefetch_addr
-            db_table[signature].first += 1;
+            this->db_table[signature].first += 1;
         }
 
         // Remove this block's entry from history table
-        hist_table.erase(tag_evict);
+        this->hist_table.erase(tag_evict);
     }
 }
 
 void CACHE::l1d_prefetcher_final_stats()
 {
     cout << "CPU " << cpu << " L1D DBCP final stats" << endl;
-    cout << "DBC Table size: " << db_table.size() << endl;
+    cout << "DBC Table size: " << this->db_table.size() << endl;
     cout << "DBC TABLE\tHIT:" << dbtable_hit << "\t" << endl;
     // cout << "DBC Table\n";
     // print_db_table();
@@ -129,6 +136,27 @@ void CACHE::l1d_prefetcher_final_stats()
 uint64_t xor_encoding(uint64_t old_sig, uint64_t new_pc)
 {
     return old_sig ^ new_pc;
+}
+
+// truncated addition: add and then truncate
+uint64_t add_truncate(uint64_t old_sig, uint64_t new_pc, uint8_t first)
+{
+    // sanity check: upper limit on the number of bits
+    // (we are not going above 30 in our experiments)
+    if (BITS_TO_KEEP > 31) {
+        return old_sig;
+    }
+    uint8_t BITS_TO_SHIFT = 64 - BITS_TO_KEEP;
+    if (!first) {
+        // bring the relevant bits back to LSP
+        uint64_t old_sig = old_sig >> BITS_TO_SHIFT;
+    }
+    
+    // add pc to the trace
+    uint64_t signature = old_sig + new_pc;
+    // keep only the last n bits
+    signature = signature << BITS_TO_SHIFT;
+    return signature;
 }
 
 // an implementation of cantor pairing which we use as one of the
@@ -145,29 +173,32 @@ uint64_t cantor_encoding(uint64_t old_sig, uint64_t new_pc)
 // add new_pc to some element in the history table
 // if tag doesn't exist, it will place new_pc there
 // else, it will add new+pc to the existing trace encoding
-void insert_to_hist(uint64_t tag, uint64_t new_pc)
+void CACHE::insert_to_hist(uint64_t tag, uint64_t new_pc)
 {
-    map<uint64_t, uint64_t>::iterator itr = hist_table.find(tag);
+    history_iter itr = this->hist_table.find(tag);
     // if we found the element, i.e. iterator hasn't reached the end
-    if (itr != hist_table.end()) {
-        hist_table[tag] = xor_encoding(hist_table[tag], new_pc);
+    if (itr != this->hist_table.end()) {
+        // this is not the first addr in trace, so pass 0 as last argument
+        // this->hist_table[tag] = add_truncate(this->hist_table[tag], new_pc, 0);
+        this->hist_table[tag] = xor_encoding(this->hist_table[tag], new_pc);
     }
     else {
-        hist_table[tag] = new_pc;
+        // this->hist_table[tag] = add_truncate(0, new_pc, 1);
+        this->hist_table[tag] = new_pc;
     }
 }
 
-void print_hist_table()
+void CACHE::print_hist_table()
 {
-    for (auto i = hist_table.begin(); i != hist_table.end(); i++) {
+    for (auto i = this->hist_table.begin(); i != this->hist_table.end(); i++) {
         cout << "map: " << i->first << "\t" << i->second;
     }
     cout << endl;
 }
 
-void print_db_table()
+void CACHE::print_db_table()
 {
-    for (auto i = db_table.begin(); i != db_table.end(); i++) {
+    for (auto i = this->db_table.begin(); i != this->db_table.end(); i++) {
         cout << i->first << ":\t" << i->second.first;
         cout << "::::" << i->second.second << endl;
     }
