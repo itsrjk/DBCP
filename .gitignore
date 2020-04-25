@@ -32,8 +32,7 @@
 *.app
 
 #folders
-results_10M/*
-results_200M/*
+results_*/*
 dpc3_traces/*
 .vscode/settings.json
 bin/*
